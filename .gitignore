@@ -1,0 +1,20 @@
+# Front-end (React/Node)
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+frontend/.env
+
+# Back-end (Python)
+backend/__pycache__/
+backend/venv/
+backend/env/
+backend/.env
+
+# Bases de datos y modelos (SQL / Ollama)
+*.sqlite3
+*.db
+backend/ai_engine/models/
+
+# Sistema Operativo
+.DS_Store
+Thumbs.db
