@@ -1,121 +1,134 @@
-import { useState } from 'react'
-import heroImg from './assets/hero.png'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
+import { useState, useEffect } from 'react'
+import ReactMarkdown from 'react-markdown'
+import localforage from 'localforage'
 import './App.css'
 
 function App() {
-  const [count, setCount] = useState(0)
+  const [notas, setNotas] = useState([])
+  const [notaActiva, setNotaActiva] = useState(null)
+  const [estadoSync, setEstadoSync] = useState('Sincronizado')
+
+  // 1. Cargar notas al iniciar y configurar el detector de conexión
+  useEffect(() => {
+    localforage.getItem('boveda_notas').then((guardadas) => {
+      if (guardadas && guardadas.length > 0) {
+        setNotas(guardadas)
+        setNotaActiva(guardadas[0].id)
+      }
+    })
+
+    // Listener para sincronización automática al recuperar el internet
+    window.addEventListener('online', sincronizarConServidor)
+    window.addEventListener('offline', () => setEstadoSync('Modo Offline'))
+
+    return () => {
+      window.removeEventListener('online', sincronizarConServidor)
+      window.removeEventListener('offline', () => setEstadoSync('Modo Offline'))
+    }
+  }, [])
+
+  // 2. Persistir en IndexedDB en cada cambio
+  useEffect(() => {
+    if (notas.length > 0) {
+      localforage.setItem('boveda_notas', notas)
+      setEstadoSync('Cambios locales sin sincronizar')
+    }
+  }, [notas])
+
+  // 3. Función para enviar los datos al backend FastAPI
+  const sincronizarConServidor = async () => {
+    setEstadoSync('Sincronizando...')
+    try {
+      // Leemos la fuente de la verdad local directamente
+      const notasLocales = await localforage.getItem('boveda_notas')
+      if (!notasLocales || notasLocales.length === 0) return
+
+      const respuesta = await fetch('http://localhost:8000/api/sincronizar', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(notasLocales)
+      })
+
+      if (respuesta.ok) {
+        const resultado = await respuesta.json()
+        console.log(resultado.mensaje)
+        setEstadoSync('Sincronizado')
+      } else {
+        setEstadoSync('Error en el servidor')
+      }
+    } catch (error) {
+      console.error('Fallo de red al intentar sincronizar:', error)
+      setEstadoSync('Sin conexión al servidor')
+    }
+  }
+
+  const crearNota = () => {
+    const nuevaNota = {
+      id: Date.now().toString(),
+      titulo: 'Nueva Nota',
+      contenido: '# Nueva Nota\n\nEmpieza a escribir...'
+    }
+    setNotas([nuevaNota, ...notas])
+    setNotaActiva(nuevaNota.id)
+  }
+
+  const actualizarNota = (texto) => {
+    const lineas = texto.split('\n')
+    const posibleTitulo = lineas[0].startsWith('# ') ? lineas[0].replace('# ', '') : 'Sin título'
+
+    const notasActualizadas = notas.map(nota => {
+      if (nota.id === notaActiva) {
+        return { ...nota, titulo: posibleTitulo, contenido: texto }
+      }
+      return nota
+    })
+    setNotas(notasActualizadas)
+  }
+
+  const notaActual = notas.find(n => n.id === notaActiva) || { contenido: '' }
 
   return (
-    <>
-      <section id="center">
-        <div className="hero">
-          <img src={heroImg} className="base" width="170" height="179" alt="" />
-          <img src={reactLogo} className="framework" alt="React logo" />
-          <img src={viteLogo} className="vite" alt="Vite logo" />
+    <div className="boveda-layout">
+      <aside className="sidebar">
+        <div className="sidebar-header">
+          <div>
+            <h3>Archivos Locales</h3>
+            <span style={{fontSize: '10px', color: '#888'}}>{estadoSync}</span>
+          </div>
+          <button onClick={sincronizarConServidor} style={{marginRight: '5px', background: '#2ea44f'}}>Sync</button>
+          <button onClick={crearNota}>+ Nueva</button>
         </div>
-        <div>
-          <h1>Get started</h1>
-          <p>
-            Edit <code>src/App.jsx</code> and save to test <code>HMR</code>
-          </p>
-        </div>
-        <button
-          type="button"
-          className="counter"
-          onClick={() => setCount((count) => count + 1)}
-        >
-          Count is {count}
-        </button>
-      </section>
+        <ul className="lista-notas">
+          {notas.map(nota => (
+            <li
+              key={nota.id}
+              className={nota.id === notaActiva ? 'activa' : ''}
+              onClick={() => setNotaActiva(nota.id)}
+            >
+              {nota.titulo}
+            </li>
+          ))}
+        </ul>
+      </aside>
 
-      <div className="ticks"></div>
-
-      <section id="next-steps">
-        <div id="docs">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#documentation-icon"></use>
-          </svg>
-          <h2>Documentation</h2>
-          <p>Your questions, answered</p>
-          <ul>
-            <li>
-              <a href="https://vite.dev/" target="_blank">
-                <img className="logo" src={viteLogo} alt="" />
-                Explore Vite
-              </a>
-            </li>
-            <li>
-              <a href="https://react.dev/" target="_blank">
-                <img className="button-icon" src={reactLogo} alt="" />
-                Learn more
-              </a>
-            </li>
-          </ul>
+      <main className="workspace">
+        <div className="editor-panel">
+          <textarea
+            value={notaActual.contenido}
+            onChange={(e) => actualizarNota(e.target.value)}
+            disabled={!notaActiva}
+            placeholder="Crea una nota en la barra lateral para comenzar."
+          />
         </div>
-        <div id="social">
-          <svg className="icon" role="presentation" aria-hidden="true">
-            <use href="/icons.svg#social-icon"></use>
-          </svg>
-          <h2>Connect with us</h2>
-          <p>Join the Vite community</p>
-          <ul>
-            <li>
-              <a href="https://github.com/vitejs/vite" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#github-icon"></use>
-                </svg>
-                GitHub
-              </a>
-            </li>
-            <li>
-              <a href="https://chat.vite.dev/" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#discord-icon"></use>
-                </svg>
-                Discord
-              </a>
-            </li>
-            <li>
-              <a href="https://x.com/vite_js" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#x-icon"></use>
-                </svg>
-                X.com
-              </a>
-            </li>
-            <li>
-              <a href="https://bsky.app/profile/vite.dev" target="_blank">
-                <svg
-                  className="button-icon"
-                  role="presentation"
-                  aria-hidden="true"
-                >
-                  <use href="/icons.svg#bluesky-icon"></use>
-                </svg>
-                Bluesky
-              </a>
-            </li>
-          </ul>
+        <div className="preview-panel">
+          <div className="markdown-preview">
+            <ReactMarkdown>{notaActual.contenido}</ReactMarkdown>
+          </div>
         </div>
-      </section>
-
-      <div className="ticks"></div>
-      <section id="spacer"></section>
-    </>
+      </main>
+    </div>
   )
 }
 
