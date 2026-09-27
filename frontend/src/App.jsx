@@ -5,6 +5,10 @@ import { Plus, FileText, RefreshCw, CheckCircle2, AlertCircle, Network } from 'l
 import GrafoBoveda from './GrafoBoveda'
 import './App.css'
 
+// URL del backend de sincronización. En local usa FastAPI en el puerto 8000;
+// en producción (GitHub Pages) solo se sincroniza si se define VITE_API_URL.
+const API_URL = import.meta.env.VITE_API_URL ?? (import.meta.env.DEV ? 'http://localhost:8000' : '')
+
 function App() {
   const [notas, setNotas] = useState([])
   const [notaActiva, setNotaActiva] = useState(null)
@@ -34,17 +38,25 @@ function App() {
   useEffect(() => {
     if (notas.length > 0) {
       localforage.setItem('boveda_notas', notas)
-      setEstadoSync('pendiente')
+      setEstadoSync(API_URL ? 'pendiente' : 'sincronizado')
     }
   }, [notas])
 
   const sincronizarConServidor = async () => {
+    // Sin backend configurado, las notas quedan guardadas solo en el navegador
+    if (!API_URL) {
+      setEstadoSync('sincronizado')
+      return
+    }
     setEstadoSync('sincronizando')
     try {
       const notasLocales = await localforage.getItem('boveda_notas')
-      if (!notasLocales || notasLocales.length === 0) return
+      if (!notasLocales || notasLocales.length === 0) {
+        setEstadoSync('sincronizado')
+        return
+      }
 
-      const respuesta = await fetch('http://localhost:8000/api/sincronizar', {
+      const respuesta = await fetch(`${API_URL}/api/sincronizar`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(notasLocales)
