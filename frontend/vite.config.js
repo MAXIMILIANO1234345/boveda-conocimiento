@@ -3,6 +3,8 @@ import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
 
 export default defineConfig({
+  // En GitHub Pages la app vive en /boveda-conocimiento/; en local, en la raíz
+  base: process.env.GITHUB_PAGES ? '/boveda-conocimiento/' : '/',
   plugins: [
     react(),
     VitePWA({
